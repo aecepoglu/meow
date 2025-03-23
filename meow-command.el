@@ -1032,10 +1032,54 @@ numeric, repeat times.
           (meow--select))
         (meow--maybe-highlight-num-positions '(meow--backward-line-1 . meow--forward-line-1)))))))
 
+(defmacro meow--while-forward (&rest body)
+ (let ((+rev? (make-symbol "rev?"))
+       (+result (make-symbol "result")))
+  `(let ((,+rev? (meow--direction-backward-p)))
+    (when ,+rev? (exchange-point-and-mark))
+    (let ((,+result (progn ,@body)))
+     (when ,+rev? (exchange-point-and-mark))
+     ,+result))))
+
+(defun meow-ensure-lines ()
+ "grows region to cover entire lines"
+ (interactive)
+ (unless (equal '(expand . line) (meow--selection-type))
+  (meow--while-forward
+   (let ((pt (point)))
+    (when (use-region-p)
+     (goto-char (region-beginning)))
+    (set-mark (line-beginning-position))
+    (goto-char pt)
+    (goto-char (line-end-position)))
+   t)))
+
 (defun meow-line-expand (n)
-  "Like `meow-line', but always expand."
-  (interactive "p")
-  (meow-line n t))
+ "Select the current line, eol is not included.
+
+Create selection with type (expand . line).
+For the selection with type (expand . line), expand it by line.
+For the other types, change selection type to (expand . line)
+ and grow selection to cover the entire lines
+
+Prefix:
+numeric, repeat times.
+"
+ (interactive "p")
+ (let ((rev? (meow--direction-backward-p)))
+  (unless (meow-ensure-lines)
+   (forward-line (* n (if rev? -1 1)))
+   (goto-char (if rev?
+               (line-beginning-position)
+               (line-end-position))))
+  (let ((a (if rev? (region-end)  (region-beginning)))
+        (b (if rev? (region-beginning) (region-end))))
+   (thread-first
+    '(expand . line)
+    (meow--make-selection a b nil)
+    (meow--select)))
+  (meow--maybe-highlight-num-positions
+   '(meow--backward-line-1 . meow--forward-line-1))))
 
 (defun meow-goto-line ()
   "Goto line, recenter and select that line.
